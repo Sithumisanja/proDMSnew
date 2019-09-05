@@ -48,7 +48,9 @@ import com.google.firebase.storage.UploadTask;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ProfileActivity extends AppCompatActivity implements LocationListener{
 
@@ -66,9 +68,13 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
     private StorageReference mStorageRef;
     private Uri tempUri;
     private File finalFile;
-    private Uri downloadUrl;
+    private String downloadUri;
+    private String userid;
+    private Date date;
+    private String email;
 
 //    private String databasePath;
+    private FirebaseDatabase database;
     private DatabaseReference databaseReference;
 //    private String imageuploadId;
     private FirebaseAuth auth;
@@ -82,11 +88,14 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
     protected Double latitude, longitude;
     protected String latVal, longVal;
 
+    private static final AtomicLong LAST_TIME_MS= new AtomicLong();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_profile);
 
+        date=new Date();
 //        btn_upload.setEnabled(true);
         btn_takephoto = findViewById(R.id.btn_takephoto);
         btn_logout = findViewById(R.id.btn_logout);
@@ -95,6 +104,10 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
         mStorageRef= FirebaseStorage.getInstance().getReference();
 //        databaseReference= FirebaseDatabase.getInstance().getReference(databasePath);
         auth=FirebaseAuth.getInstance();
+        database=FirebaseDatabase.getInstance();
+
+        //how to set values to real time database
+
         checkFilePermissions();
 
 
@@ -103,23 +116,41 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
             public void onClick(View v) {
                 checkFilePermissions();
                 FirebaseUser user =auth.getCurrentUser();
-                String userid=user.getUid();
+                userid=user.getUid();
+                email=user.getEmail();
+
 
                 String name=imageName;
 //                String path=uristring;
                 Log.i("info","String name is"+ name);
                 if(!name.equals("")) {
                     Uri urix=Uri.fromFile(new File(finalFile.getAbsolutePath()));
-                    StorageReference storageReference = mStorageRef.child("images/" + userid + "/" + name);
+                    final StorageReference storageReference = mStorageRef.child("images/" + userid + "/" + name);
                     Log.i("storageref", storageReference.getPath());
                     storageReference.putFile(urix)
                             .addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
                         @Override
                         public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
                             Toast.makeText(getApplicationContext(),"upload successful",Toast.LENGTH_LONG).show();
+
 //                            btn_upload.setEnabled(false);
 //                            imageuploadId=databaseReference.push().getKey();
 //                            databaseReference.child(imageuploadId).setValue();
+
+                            long uniqueid=uniqueCurrentTimeMS();
+                            downloadUri=storageReference.getDownloadUrl().toString();
+
+                            databaseReference=database.getReference(userid+"/"+uniqueid+"/date");
+                            databaseReference.setValue(date.toString());
+                            databaseReference=database.getReference(userid+"/"+uniqueid+"/image");
+                            databaseReference.setValue(downloadUri);
+                            databaseReference=database.getReference(userid+"/"+uniqueid+"/email");
+                            databaseReference.setValue(email);
+                            databaseReference=database.getReference(userid+"/"+uniqueid+"/latitude");
+                            databaseReference.setValue(latitude);
+                            databaseReference=database.getReference(userid+"/"+uniqueid+"/longitude");
+                            databaseReference.setValue(longitude);
+
                         }
 
                     }).addOnFailureListener(new OnFailureListener() {
@@ -340,11 +371,22 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
         return cursor.getString(idx);
     }
 
-    public Uri getDownloadUrl() {
-        return downloadUrl;
-    }
+//    public Uri getDownloadUrl() {
+//        return downloadUrl;
+//    }
 
-    public void setDownloadUrl(Uri downloadUrl) {
-        this.downloadUrl = downloadUrl;
+//    public void setDownloadUrl(Uri downloadUrl) {
+//        this.downloadUrl = downloadUrl;
+//    }
+
+    public static long uniqueCurrentTimeMS() {
+        long now = System.currentTimeMillis();
+        while(true) {
+            long lastTime = LAST_TIME_MS.get();
+            if (lastTime >= now)
+                now = lastTime+1;
+            if (LAST_TIME_MS.compareAndSet(lastTime, now))
+                return now;
+        }
     }
 }
