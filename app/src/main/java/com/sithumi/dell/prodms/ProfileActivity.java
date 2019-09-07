@@ -30,6 +30,8 @@ import android.widget.Toast;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.Continuation;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
@@ -68,7 +70,7 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
     private StorageReference mStorageRef;
     private Uri tempUri;
     private File finalFile;
-    private String downloadUri;
+    private String downloadURL;
     private String userid;
     private Date date;
     private String email;
@@ -121,39 +123,48 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
 
 
                 String name=imageName;
-//                String path=uristring;
                 Log.i("info","String name is"+ name);
                 if(!name.equals("")) {
                     Uri urix=Uri.fromFile(new File(finalFile.getAbsolutePath()));
                     final StorageReference storageReference = mStorageRef.child("images/" + userid + "/" + name);
                     Log.i("storageref", storageReference.getPath());
-                    storageReference.putFile(urix)
-                            .addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
-                        @Override
-                        public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                            Toast.makeText(getApplicationContext(),"upload successful",Toast.LENGTH_LONG).show();
+                   UploadTask uploadTask =storageReference.putFile(urix);
 
-//                            btn_upload.setEnabled(false);
-//                            imageuploadId=databaseReference.push().getKey();
-//                            databaseReference.child(imageuploadId).setValue();
+                   Task<Uri> uriTask=uploadTask.continueWithTask(new Continuation<UploadTask.TaskSnapshot, Task<Uri>>() {
+                       @Override
+                       public Task<Uri> then(@NonNull Task<UploadTask.TaskSnapshot> task) throws Exception {
 
-                            long uniqueid=uniqueCurrentTimeMS();
-                            downloadUri=storageReference.getDownloadUrl().toString();
+                           if (!task.isSuccessful()) {
+                               throw task.getException();
+                           }
 
-                            databaseReference=database.getReference(userid+"/"+uniqueid+"/date");
-                            databaseReference.setValue(date.toString());
-                            databaseReference=database.getReference(userid+"/"+uniqueid+"/image");
-                            databaseReference.setValue(downloadUri);
-                            databaseReference=database.getReference(userid+"/"+uniqueid+"/email");
-                            databaseReference.setValue(email);
-                            databaseReference=database.getReference(userid+"/"+uniqueid+"/latitude");
-                            databaseReference.setValue(latitude);
-                            databaseReference=database.getReference(userid+"/"+uniqueid+"/longitude");
-                            databaseReference.setValue(longitude);
+                           // Continue with the task to get the download URL
+                           return storageReference.getDownloadUrl();
+                       }
 
-                        }
-
-                    }).addOnFailureListener(new OnFailureListener() {
+                   }).addOnCompleteListener(new OnCompleteListener<Uri>() {
+                       @Override
+                       public void onComplete(@NonNull Task<Uri> task) {
+                           if (task.isSuccessful()) {
+                               Uri downloadUri = task.getResult();
+                               downloadURL = downloadUri.toString();
+                               long uniqueid=uniqueCurrentTimeMS();
+                               databaseReference=database.getReference("users/"+userid+"/"+uniqueid+"/date");
+                               databaseReference.setValue(date.toString());
+                               databaseReference=database.getReference("users/"+userid+"/"+uniqueid+"/image");
+                               databaseReference.setValue(downloadURL);
+                               databaseReference=database.getReference("users/"+userid+"/"+uniqueid+"/email");
+                               databaseReference.setValue(email);
+                               databaseReference=database.getReference("users/"+userid+"/"+uniqueid+"/latitude");
+                               databaseReference.setValue(latitude);
+                               databaseReference=database.getReference("users/"+userid+"/"+uniqueid+"/longitude");
+                               databaseReference.setValue(longitude);
+                               Toast.makeText(getApplicationContext(),"upload successful",Toast.LENGTH_LONG).show();
+                           } else{
+                               Log.i("info", "Task failed");
+                           }
+                       }
+                   }).addOnFailureListener(new OnFailureListener() {
                         @Override
                         public void onFailure(@NonNull Exception e) {
                             Toast.makeText(getApplicationContext(),"upload failed",Toast.LENGTH_LONG).show();
@@ -305,15 +316,6 @@ public class ProfileActivity extends AppCompatActivity implements LocationListen
 
                 }
             });
-//
-//            MediaScannerConnection.scanFile(this,
-//                    new String[] { finalFile.getAbsolutePath() }, null,
-//                    new MediaScannerConnection.OnScanCompletedListener() {
-//                        public void onScanCompleted(String path, Uri uri) {
-//                            Log.i("onScanCompleted", uri.getPath());
-//                         uristring=uri;
-//                        }
-//                    });
 
         }
     }
